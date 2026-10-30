@@ -125,6 +125,7 @@
       font-size: 0.95rem;
       cursor: pointer;
       white-space: nowrap;
+      transition: all 0.15s ease;
     }
     .btn.secondary {
       background: #1c1c24;
@@ -304,8 +305,8 @@
         <button class="btn" onclick="doSearch()">Tafuta</button>
       </div>
       <div style="display:flex;gap:10px;margin-top:10px;">
-        <button class="btn" style="flex:1" id="btnTrending" onclick="loadTrending()">Mpya TMDB</button>
-        <button class="btn secondary" style="flex:1" id="btnPopular" onclick="loadPopular()">Kawaida</button>
+        <button class="btn" style="flex:1" id="btnTrending">Mpya TMDB</button>
+        <button class="btn secondary" style="flex:1" id="btnPopular">Kawaida</button>
       </div>
     </div>
 
@@ -329,6 +330,7 @@
     let currentRegion = "";
     let currentCert = "";
     let currentPage = 1;
+    let currentMode = "trending";
 
     if (API_KEY) {
       document.getElementById("apiSetup").classList.add("hidden");
@@ -347,6 +349,18 @@
       document.getElementById("apiSetup").classList.add("hidden");
       document.getElementById("mainApp").classList.remove("hidden");
       loadTrending();
+    }
+
+    function setActiveButton(mode) {
+      const btnTrending = document.getElementById("btnTrending");
+      const btnPopular = document.getElementById("btnPopular");
+      if (mode === "trending") {
+        btnTrending.classList.remove("secondary");
+        btnPopular.classList.add("secondary");
+      } else {
+        btnPopular.classList.remove("secondary");
+        btnTrending.classList.add("secondary");
+      }
     }
 
     document.getElementById("regionChips").addEventListener("click", e => {
@@ -375,7 +389,7 @@
 
     async function tmdb(url) {
       const sep = url.includes("?") ? "&" : "?";
-      const full = `https://api.themoviedb.org/3${url}${sep}api_key=${API_KEY}&language=en-US`;
+      const full = `https://api.themoviedb.org/3\( {url} \){sep}api_key=${API_KEY}&language=en-US`;
       const res = await fetch(full);
       if (!res.ok) {
         if (res.status === 401) throw new Error("API Key si sahihi au imeisha. Weka key mpya.");
@@ -386,9 +400,12 @@
 
     async function loadTrending() {
       setStatus("Inapakia filamu mpya...");
+      currentMode = "trending";
       currentRegion = "";
       currentCert = "";
       currentPage = 1;
+      setActiveButton("trending");
+
       try {
         const regionChips = document.querySelectorAll("#regionChips .chip");
         regionChips.forEach(c => c.classList.remove("active"));
@@ -406,12 +423,14 @@
     }
 
     async function loadPopular() {
-      setStatus("Inapakia filamu za kawaida...");
+      setStatus("Inapakia filamu za kawaida (za zamani)...");
+      currentMode = "popular";
       currentRegion = "";
       currentCert = "";
       currentPage = 1;
+      setActiveButton("popular");
+
       try {
-        // Reset chips (salama)
         const regionChips = document.querySelectorAll("#regionChips .chip");
         regionChips.forEach(c => c.classList.remove("active"));
         if (regionChips[0]) regionChips[0].classList.add("active");
@@ -420,7 +439,8 @@
         ageChips.forEach(c => c.classList.remove("active"));
         if (ageChips[0]) ageChips[0].classList.add("active");
 
-        const data = await tmdb("/discover/movie?sort_by=popularity.desc&include_adult=false&page=1");
+        // Filamu maarufu za zamani (hadi 2018) - zinapatikana zaidi full movie kwenye YouTube
+        const data = await tmdb("/discover/movie?sort_by=vote_count.desc&include_adult=false&primary_release_date.lte=2018-12-31&vote_count.gte=500&page=1");
         renderMovies(data.results || []);
       } catch (err) {
         setStatus("Kawaida hitilafu: " + err.message, true);
@@ -435,8 +455,7 @@
           params += `&with_origin_country=${currentRegion}`;
         }
         if (currentCert === "dini") {
-          // Filamu za dini / gospel / faith (keywords za TMDB)
-          params += `&with_keywords=9715|180547|180549|9717`; // religion, christianity, gospel, faith
+          params += `&with_keywords=9715|180547|180549|9717`;
         } else if (currentCert) {
           params += `&certification_country=US&certification=${currentCert}`;
         }
@@ -450,7 +469,8 @@
     async function doSearch() {
       const q = document.getElementById("searchInput").value.trim();
       if (!q) {
-        loadDiscover();
+        if (currentMode === "popular") loadPopular();
+        else loadTrending();
         return;
       }
       setStatus("Inatafuta...");
@@ -487,20 +507,19 @@
         return `
           <div class="movie-card">
             ${poster 
-              ? `<img class="poster" src="${poster}" alt="${safeTitle}" loading="lazy" onclick="openMovie(${m.id}, '${safeTitle}')" />`
-              : `<div class="poster" style="display:flex;align-items:center;justify-content:center;color:#8e8e93;font-size:0.85rem;" onclick="openMovie(${m.id}, '${safeTitle}')">Hakuna picha</div>`
+              ? `<img class="poster" src="\( {poster}" alt=" \){safeTitle}" loading="lazy" onclick="openMovie(\( {m.id}, ' \){safeTitle}')" />`
+              : `<div class="poster" style="display:flex;align-items:center;justify-content:center;color:#8e8e93;font-size:0.85rem;" onclick="openMovie(\( {m.id}, ' \){safeTitle}')">Hakuna picha</div>`
             }
             <div class="movie-info">
               <div class="movie-title">${escapeHtml(title)}</div>
               <div class="movie-meta">${year} · <span class="rating">★ ${rating}</span></div>
-              <button class="tazama-btn" onclick="openMovie(${m.id}, '${safeTitle}')">▶ Tazama HD</button>
+              <button class="tazama-btn" onclick="openMovie(\( {m.id}, ' \){safeTitle}')">▶ Tazama HD</button>
             </div>
           </div>`;
       }).join("");
     }
 
     function openMovie(id, title) {
-      // Fungua YouTube (full movie + trailer)
       const q = encodeURIComponent(title + " full movie");
       const url = "https://www.youtube.com/results?search_query=" + q;
       const a = document.createElement("a");
@@ -519,13 +538,9 @@
       return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;");
     }
 
-    // Bind buttons (inafanya kazi bila shaka)
-    document.getElementById("btnTrending").addEventListener("click", function() {
-      loadTrending();
-    });
-    document.getElementById("btnPopular").addEventListener("click", function() {
-      loadPopular();
-    });
+    // Bind buttons
+    document.getElementById("btnTrending").addEventListener("click", loadTrending);
+    document.getElementById("btnPopular").addEventListener("click", loadPopular);
   </script>
 </body>
-</html>
+          </html>
